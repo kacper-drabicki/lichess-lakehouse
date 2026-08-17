@@ -1,1 +1,1 @@
-# lichess-lakehouse-databricks
+# Lichess Lakehouse Project
