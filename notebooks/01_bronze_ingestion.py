@@ -1,4 +1,8 @@
 # Databricks notebook source
+# /// script
+# [tool.databricks.environment]
+# environment_version = "5"
+# ///
 # MAGIC %md
 # MAGIC ##Install Requirements
 
@@ -42,19 +46,24 @@
 
 # COMMAND ----------
 
+import sys
+sys.path.append('..')
+
+from src.pgn_parsing import stream_pgn_records, batch_generator
+
 FILE = '/tmp/lichess_db_standard_rated_2013-01.pgn'
 TABLE = 'lichess.bronze.lichess_db_standard_rated_2013_01'
 BATCH_SIZE = 10000
 
 
-def write_batch(rows):
+def write_batch(spark_session, rows: list[dict], table_name: str) -> None:
     '''
     This function creates a spark dataframe from the rows and writes it to the Delta table
     '''
     if not rows:
         return
 
-    df = spark.createDataFrame(
+    df = spark_session.createDataFrame(
         rows,
         """
         game_id BIGINT,
@@ -64,49 +73,17 @@ def write_batch(rows):
         df.write
         .format('delta')
         .mode('append')
-        .saveAsTable(TABLE)
+        .saveAsTable(table_name)
     )
 
-batch = []
+total_games = 0
+with open(FILE, 'r', encoding="utf-8") as file:
+    record_streams = stream_pgn_records(file)
+    for batch in batch_generator(record_streams, BATCH_SIZE):
+        write_batch(spark, batch, TABLE)
+        total_games += len(batch)
 
-with open(FILE, 'r') as file:
-
-    current_game_rows = []
-
-    game_id = 0
-    for line in file:
-
-        # A new PGN game starts with '[Event ...'
-        if line.startswith('[Event') and current_game_rows:
-            game_id += 1
-            current_game_joined = ''.join(current_game_rows).strip()
-            
-            batch.append({
-                'game_id': game_id,
-                'pgn': current_game_joined
-            })
-            
-            if len(batch) >= BATCH_SIZE:
-                write_batch(batch)
-                batch = []
-
-            current_game_rows = []
-
-        current_game_rows.append(line)
-
-    # Write Last Game
-    if current_game_rows:
-        game_id += 1
-        current_game_joined = "".join(current_game_rows).strip()
-        
-        batch.append({
-            "game_id": game_id,
-            "pgn": current_game_joined
-        })
-    
-    write_batch(batch)
-
-    print(f"Total Games Loaded: {game_id}")
+print(f"Total Games Loaded: {total_games}")
 
 # COMMAND ----------
 
