@@ -92,18 +92,14 @@ print(f"Total Games Loaded: {total_games}")
 
 # COMMAND ----------
 
-df = spark.table(TABLE)
+from src.check_data_quality import validate_bronze_table
 
-# For Future: ReWrite in Pure Spark
-df.selectExpr(
-    "COUNT(*) AS total_rows",
-    "COUNT(DISTINCT game_id) AS distinct_game_ids",
-    "MIN(game_id) AS min_game_id",
-    "MAX(game_id) AS max_game_id",
-    "SUM(CASE WHEN game_id IS NULL THEN 1 ELSE 0 END) AS null_game_ids",
-    "SUM(CASE WHEN pgn IS NULL OR TRIM(pgn) = '' THEN 1 ELSE 0 END) AS empty_pgns",
-    "SUM(CASE WHEN NOT pgn LIKE '[Event%' THEN 1 ELSE 0 END) AS invalid_pgn_starts"
-).show()
+df_bronze = spark.table(TABLE)
+validation_results = validate_bronze_table(df_bronze)
+
+print(
+    f"Bronze Quality Gate passed successfully for {validation_results['total_rows']:,} games."
+)
 
 # COMMAND ----------
 
